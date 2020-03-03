@@ -1,2 +1,1 @@
-# TutorialGolang
-Kunci Jawaban
+go-skeleton
