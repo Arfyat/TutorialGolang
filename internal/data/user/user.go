@@ -130,3 +130,6 @@ func (d Data) DeleteAllUsers(ctx context.Context, user userEntity.User) error {
 
 	return err
 }
+
+
+// arifdisinii
