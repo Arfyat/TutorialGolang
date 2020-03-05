@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/vilbert/go-skeleton/pkg/grace"
+	"go-tutorial-2020/pkg/grace"
 )
 
 // UserHandler ...
