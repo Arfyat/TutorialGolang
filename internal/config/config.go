@@ -58,7 +58,7 @@ func getDefaultConfigFile() string {
 
 	if env != "" {
 		if env == envStaging {
-			configPath = "./go-tutorial-2020.development.yaml"
+			configPath = "./go-tutorial-2020.staging.yaml"
 		}
 	}
 	return configPath

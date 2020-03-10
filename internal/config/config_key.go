@@ -5,6 +5,8 @@ type (
 	Config struct {
 		Server   ServerConfig   `yaml:"server"`
 		Database DatabaseConfig `yaml:"database"`
+		Firebase FirebaseConfig `yaml:"firebase"`
+		Kafka    KafkaConfig    `yaml:"kafka"`
 	}
 
 	// ServerConfig ...
@@ -15,5 +17,17 @@ type (
 	// DatabaseConfig ...
 	DatabaseConfig struct {
 		Master string `yaml:"master"`
+	}
+
+	// FirebaseConfig ...
+	FirebaseConfig struct {
+		ProjectID string `yaml:"ProjectID"`
+	}
+
+	KafkaConfig struct {
+		Username      string   `yaml:"username"`
+		Password      string   `yaml:"password"`
+		Brokers       []string `yaml:"brokers"`
+		Subscriptions []string `yaml:"subscriptions"`
 	}
 )

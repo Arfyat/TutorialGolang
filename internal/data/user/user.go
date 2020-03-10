@@ -5,16 +5,20 @@ import (
 	"log"
 
 	"go-tutorial-2020/pkg/errors"
+	firebaseclient "go-tutorial-2020/pkg/firebaseClient"
 
 	userEntity "go-tutorial-2020/internal/entity/user"
 
+	"cloud.google.com/go/firestore"
 	"github.com/jmoiron/sqlx"
+	"google.golang.org/api/iterator"
 )
 
 type (
 	// Data ...
 	Data struct {
 		db   *sqlx.DB
+		fb   *firestore.Client
 		stmt map[string]*sqlx.Stmt
 	}
 
@@ -29,30 +33,38 @@ const (
 	getAllUsers  = "GetAllUsers"
 	qGetAllUsers = "SELECT * FROM user_test"
 
-	insertAllUsers  = "insertAllUsers"
-	qinsertAllUsers = "INSERT INTO user_test VALUES (?,?,?,?,?,?)"
+	insertUsers  = "InsertUsers"
+	qinsertUsers = "INSERT INTO user_test VALUES (NULL, ?, ?, ?, ?, ?)"
 
-	updateAllUsers  = "updateAllUsers"
-	qupdateAllUsers = "UPDATE user_test set nama_lengkap = ?, tanggal_lahir = ?, jabatan = ?, email = ? WHERE nip = ?"
+	getUserByNIP  = "GetAllUsersByNIP"
+	qGetUserByNIP = "SELECT * FROM user_test WHERE nip = ?"
 
-	deleteAllUsers  = "deleteAllUsers"
-	qdeleteAllUsers = "Delete FROM user_test where nip = ?"
+	updateUserByNIP  = "UpdateUserByNIP"
+	qUpdateUserByNIP = "UPDATE user_test SET nip = ?, nama_lengkap = ?, tanggal_lahir = ?, jabatan = ?, email = ? WHERE nip = ?"
+
+	deleteUserByNIP  = "DelteUserByNIP"
+	qDeleteUserByNIP = "DELETE FROM user_test WHERE NIP = ?"
+
+	insertNipUp  = "InsertNipUp"
+	qInsertNipUp = "SELECT MAX(CAST(RIGHT(nip,6)AS INT))+1 FROM user_test"
 )
 
 var (
 	readStmt = []statement{
 		{getAllUsers, qGetAllUsers},
-		{insertAllUsers, qinsertAllUsers},
-
-		{updateAllUsers, qupdateAllUsers},
-		{deleteAllUsers, qdeleteAllUsers},
+		{insertUsers, qinsertUsers},
+		{getUserByNIP, qGetUserByNIP},
+		{updateUserByNIP, qUpdateUserByNIP},
+		{deleteUserByNIP, qDeleteUserByNIP},
+		{insertNipUp, qInsertNipUp},
 	}
 )
 
 // New ...
-func New(db *sqlx.DB) Data {
+func New(db *sqlx.DB, fb *firebaseclient.Client) Data {
 	d := Data{
 		db: db,
+		fb: fb.Client,
 	}
 
 	d.initStmt()
@@ -73,6 +85,28 @@ func (d *Data) initStmt() {
 	}
 
 	d.stmt = stmts
+}
+
+//GetUserFromFireBase ...
+func (d Data) GetUserFromFireBase(ctx context.Context) ([]userEntity.User, error) {
+	var (
+		userFirebase []userEntity.User
+		err          error
+	)
+	// test := d.fb.Collection("user_test")
+	iter := d.fb.Collection("user_test").Documents(ctx)
+	for {
+		var user userEntity.User
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		log.Println(doc)
+		err = doc.DataTo(&user)
+		log.Println(user)
+		userFirebase = append(userFirebase, user)
+	}
+	return userFirebase, err
 }
 
 // GetAllUsers digunakan untuk mengambil semua data user
@@ -97,39 +131,115 @@ func (d Data) GetAllUsers(ctx context.Context) ([]userEntity.User, error) {
 	}
 	// Return users array
 	return users, err
+
 }
 
-// InsertAllUsers
-func (d Data) InsertAllUsers(ctx context.Context, user userEntity.User) error {
-	_, err := d.stmt[insertAllUsers].ExecContext(ctx,
-		user.UserID,
-		user.UserNip,
-		user.UserNama,
-		user.UserTanggalLahir,
-		user.UserJabatan,
-		user.UserAlamatEmail)
-	return err
-}
+//InsertUsers ...
+func (d Data) InsertUsers(ctx context.Context, user userEntity.User) error {
+	_, err := d.stmt[insertUsers].ExecContext(ctx,
 
-func (d Data) UpdateAllUsers(ctx context.Context, user userEntity.User) error {
-
-	_, err := d.stmt[updateAllUsers].ExecContext(ctx,
-		user.UserNama,
-		user.UserTanggalLahir,
-		user.UserJabatan,
-		user.UserAlamatEmail,
-		user.UserNip)
+		user.NIP,
+		user.Nama,
+		user.TanggalLahir,
+		user.Jabatan,
+		user.Email)
 
 	return err
+
 }
 
-func (d Data) DeleteAllUsers(ctx context.Context, user userEntity.User) error {
-
-	_, err := d.stmt[deleteAllUsers].ExecContext(ctx,
-		user.UserNip)
+//InsertUsersToFirebase ...
+func (d Data) InsertUsersToFirebase(ctx context.Context, user userEntity.User) error {
+	_, err := d.fb.Collection("user_test").Doc(user.NIP).Set(ctx, user)
 
 	return err
 }
 
+//InsertMany ...
+func (d Data) InsertMany(ctx context.Context, userList []userEntity.User) error {
+	var (
+		err error
+	)
+	for _, i := range userList {
+		_, err = d.fb.Collection("user_test").Doc(i.NIP).Set(ctx, i)
+	}
+	return err
+}
 
-// arifdisinii
+//user di if dipakai di var, jadi jangan bingung!
+
+//GetUserByNIP ...
+func (d Data) GetUserByNIP(ctx context.Context, NIP string) (userEntity.User, error) {
+	var (
+		user userEntity.User
+		err  error
+	)
+
+	if err = d.stmt[getUserByNIP].QueryRowxContext(ctx, NIP).StructScan(&user); err != nil {
+		return user, errors.Wrap(err, "SALAH")
+	}
+	return user, err
+}
+
+//UpdateUserByNIP ...
+func (d Data) UpdateUserByNIP(ctx context.Context, NIP string, user userEntity.User) (userEntity.User, error) {
+	_, err := d.stmt[updateUserByNIP].ExecContext(ctx,
+		user.NIP,
+		user.Nama,
+		user.TanggalLahir,
+		user.Jabatan,
+		user.Email,
+		NIP)
+
+	return user, err
+}
+
+// DeleteUserByNIP ...
+func (d Data) DeleteUserByNIP(ctx context.Context, NIP string) error {
+	_, err := d.stmt[deleteUserByNIP].ExecContext(ctx,
+
+		NIP)
+
+	return err
+
+}
+
+//InsertNipUp ...
+func (d Data) InsertNipUp(ctx context.Context) (int, error) {
+	var nipMax int
+	err := d.stmt[insertNipUp].QueryRowxContext(ctx).Scan(&nipMax)
+	return nipMax, err
+}
+
+//UpdateByNipFirebase ...
+func (d Data) UpdateByNipFirebase(ctx context.Context, nip string, user userEntity.User) error {
+	iter,err := d.fb.Collection("user_test").Doc(nip).Get(ctx)
+	userValidate := iter.Data()
+	if userValidate == nil {
+		return errors.Wrap(err, "Data Not Exist")
+	}
+	_, err = d.fb.Collection("user_test").Doc(nip).Set(ctx, user)
+	return err
+}
+
+// DeleteByNipFirebase ...
+func(d Data) DeleteByNipFirebase(ctx context.Context, nip string) error {
+	iter, err := d.fb.Collection("user_test").Doc(nip).Get(ctx)
+	userValidate := iter.Data()
+	if userValidate == nil {
+		return errors.Wrap(err, "Data Not Exist")
+	}
+	_, err = d.fb.Collection("user_test").Doc(nip).Delete(ctx)
+	return err
+	
+}
+// DeleteAllFirebase ...
+// func(d Data) DeleteAllFirebase(ctx context.Context) error {
+// 	err := d.fb.Collection("user_test").Get(ctx)
+// 	userValidate := iter.Data()
+// 	if userValidate == nil {
+// 		return errors.Wrap(err, "Data Not Exist")
+// 	}
+// 	_, err = d.fb.Collection("user_test").Delete(ctx)
+// 	return err
+// }
